@@ -87,8 +87,8 @@ func setRules(config *viper.Viper, e executor) error {
 	return nil
 }
 
-func createOutput(config *viper.Viper) (*AuditWriter, error) {
-	var writer *AuditWriter
+func createOutput(config *viper.Viper) (AuditWriter, error) {
+	var writer AuditWriter
 	var err error
 	i := 0
 
@@ -107,7 +107,7 @@ func createOutput(config *viper.Viper) (*AuditWriter, error) {
 			return nil, err
 		}
 
-		go handleLogRotation(config, writer)
+		go handleLogRotation(config, writer.(*DefaultAuditWriter))
 	}
 
 	if config.GetBool("output.stdout.enabled") == true {
@@ -137,7 +137,7 @@ func createOutput(config *viper.Viper) (*AuditWriter, error) {
 	return writer, nil
 }
 
-func createGELFOutput(config *viper.Viper) (*AuditWriter, error) {
+func createGELFOutput(config *viper.Viper) (AuditWriter, error) {
 	attempts := config.GetInt("output.gelf.attempts")
 	if attempts < 1 {
 		return nil, fmt.Errorf("Output attempts for GELF must be at least 1, %v provided", attempts)
@@ -158,21 +158,20 @@ func createGELFOutput(config *viper.Viper) (*AuditWriter, error) {
 		writer.CompressionType = gelf.CompressType(config.GetInt("output.gelf.compression.type"))
 		writer.CompressionLevel = config.GetInt("output.gelf.compression.level")
 
-		return NewAuditWriter(writer, attempts), nil
+		return NewDefaultAuditWriter(writer, attempts), nil
 	case "tcp":
 		writer, err := gelf.NewTCPWriter(address)
 		if err != nil {
 			return nil, err
 		}
 
-		return NewAuditWriter(writer, attempts), nil
+		return NewDefaultAuditWriter(writer, attempts), nil
 	default:
 		return nil, fmt.Errorf("unsupported network by GELF library")
 	}
-
 }
 
-func createSyslogOutput(config *viper.Viper) (*AuditWriter, error) {
+func createSyslogOutput(config *viper.Viper) (AuditWriter, error) {
 	attempts := config.GetInt("output.syslog.attempts")
 	if attempts < 1 {
 		return nil, fmt.Errorf("Output attempts for syslog must be at least 1, %v provided", attempts)
@@ -189,10 +188,10 @@ func createSyslogOutput(config *viper.Viper) (*AuditWriter, error) {
 		return nil, fmt.Errorf("Failed to open syslog writer. Error: %v", err)
 	}
 
-	return NewAuditWriter(syslogWriter, attempts), nil
+	return NewDefaultAuditWriter(syslogWriter, attempts), nil
 }
 
-func createFileOutput(config *viper.Viper) (*AuditWriter, error) {
+func createFileOutput(config *viper.Viper) (AuditWriter, error) {
 	attempts := config.GetInt("output.file.attempts")
 	if attempts < 1 {
 		return nil, fmt.Errorf("Output attempts for file must be at least 1, %v provided", attempts)
@@ -242,20 +241,22 @@ func createFileOutput(config *viper.Viper) (*AuditWriter, error) {
 		return nil, fmt.Errorf("Could not chown output file. Error: %s", err)
 	}
 
-	return NewAuditWriter(f, attempts), nil
+	return NewDefaultAuditWriter(f, attempts), nil
 }
 
-func handleLogRotation(config *viper.Viper, writer *AuditWriter) {
+func handleLogRotation(config *viper.Viper, writer *DefaultAuditWriter) {
 	// Re-open our log file. This is triggered by a USR1 signal and is meant to be used upon log rotation
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGUSR1)
 
 	for range sigc {
-		newWriter, err := createFileOutput(config)
+		na, err := createFileOutput(config)
 		if err != nil {
 			el.Fatalln("Error re-opening log file. Exiting.")
 		}
+
+		newWriter := na.(*DefaultAuditWriter)
 
 		oldFile := writer.w.(*os.File)
 		writer.w = newWriter.w
@@ -268,7 +269,7 @@ func handleLogRotation(config *viper.Viper, writer *AuditWriter) {
 	}
 }
 
-func createStdOutOutput(config *viper.Viper) (*AuditWriter, error) {
+func createStdOutOutput(config *viper.Viper) (AuditWriter, error) {
 	attempts := config.GetInt("output.stdout.attempts")
 	if attempts < 1 {
 		return nil, fmt.Errorf("Output attempts for stdout must be at least 1, %v provided", attempts)
@@ -277,7 +278,7 @@ func createStdOutOutput(config *viper.Viper) (*AuditWriter, error) {
 	// l logger is no longer stdout
 	l.SetOutput(os.Stderr)
 
-	return NewAuditWriter(os.Stdout, attempts), nil
+	return NewDefaultAuditWriter(os.Stdout, attempts), nil
 }
 
 func createFilters(config *viper.Viper) ([]AuditFilter, error) {

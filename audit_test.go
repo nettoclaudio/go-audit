@@ -181,7 +181,8 @@ func Test_createFileOutput(t *testing.T) {
 	w, err = createFileOutput(c)
 	assert.Nil(t, err)
 	assert.NotNil(t, w)
-	assert.IsType(t, &os.File{}, w.w)
+	assert.IsType(t, &DefaultAuditWriter{}, w)
+	assert.IsType(t, &os.File{}, w.(*DefaultAuditWriter).w)
 }
 
 func Test_createSyslogOutput(t *testing.T) {
@@ -215,7 +216,8 @@ func Test_createSyslogOutput(t *testing.T) {
 	w, err = createSyslogOutput(c)
 	assert.Nil(t, err)
 	assert.NotNil(t, w)
-	assert.IsType(t, &syslog.Writer{}, w.w)
+	assert.IsType(t, &DefaultAuditWriter{}, w)
+	assert.IsType(t, &syslog.Writer{}, w.(*DefaultAuditWriter).w)
 }
 
 func Test_createStdOutOutput(t *testing.T) {
@@ -232,7 +234,8 @@ func Test_createStdOutOutput(t *testing.T) {
 	w, err = createStdOutOutput(c)
 	assert.Nil(t, err)
 	assert.NotNil(t, w)
-	assert.IsType(t, &os.File{}, w.w)
+	assert.IsType(t, &DefaultAuditWriter{}, w)
+	assert.IsType(t, &os.File{}, w.(*DefaultAuditWriter).w)
 }
 
 func Test_createGELFOutput(t *testing.T) {
@@ -266,7 +269,8 @@ func Test_createGELFOutput(t *testing.T) {
 		c.Set("output.gelf.address", l.LocalAddr().String())
 		writer, err := createGELFOutput(c)
 		assert.Nil(t, err)
-		assert.IsType(t, &gelf.UDPWriter{}, writer.w)
+		assert.IsType(t, &DefaultAuditWriter{}, writer)
+		assert.IsType(t, &gelf.UDPWriter{}, writer.(*DefaultAuditWriter).w)
 	})
 
 	t.Run("When using TCP network, should return a gelf.TCPWriter writer", func(t *testing.T) {
@@ -283,8 +287,9 @@ func Test_createGELFOutput(t *testing.T) {
 		c.Set("output.gelf.address", l.Addr().String())
 		writer, err := createGELFOutput(c)
 		assert.Nil(t, err)
-		assert.Equal(t, writer.attempts, 3)
-		assert.IsType(t, &gelf.TCPWriter{}, writer.w)
+		assert.IsType(t, &DefaultAuditWriter{}, writer)
+		assert.Equal(t, writer.(*DefaultAuditWriter).attempts, 3)
+		assert.IsType(t, &gelf.TCPWriter{}, writer.(*DefaultAuditWriter).w)
 	})
 
 	t.Run("When using an unsupported network (not UDP or TCP), should return an expected error", func(t *testing.T) {
@@ -312,7 +317,7 @@ func Test_createGELFOutput(t *testing.T) {
 		w, err := createGELFOutput(c)
 		assert.Nil(t, err)
 
-		udpWriter, ok := w.w.(*gelf.UDPWriter)
+		udpWriter, ok := w.(*DefaultAuditWriter).w.(*gelf.UDPWriter)
 		assert.True(t, ok)
 		assert.Equal(t, udpWriter.CompressionLevel, flate.BestCompression)
 		assert.Equal(t, udpWriter.CompressionType, gelf.CompressZlib)
@@ -393,7 +398,7 @@ func Test_createOutput(t *testing.T) {
 	w, err = createSyslogOutput(c)
 	assert.Nil(t, err)
 	assert.NotNil(t, w)
-	assert.IsType(t, &syslog.Writer{}, w.w)
+	assert.IsType(t, &syslog.Writer{}, w.(*DefaultAuditWriter).w)
 
 	// All good file
 	c = viper.New()
@@ -406,8 +411,8 @@ func Test_createOutput(t *testing.T) {
 	w, err = createOutput(c)
 	assert.Nil(t, err)
 	assert.NotNil(t, w)
-	assert.IsType(t, &AuditWriter{}, w)
-	assert.IsType(t, &os.File{}, w.w)
+	assert.IsType(t, &DefaultAuditWriter{}, w)
+	assert.IsType(t, &os.File{}, w.(*DefaultAuditWriter).w)
 
 	// File rotation
 	os.Rename(path.Join(os.TempDir(), "go-audit.test.log"), path.Join(os.TempDir(), "go-audit.test.log.rotated"))
@@ -540,7 +545,7 @@ func Test_createFilters(t *testing.T) {
 }
 
 func Benchmark_MultiPacketMessage(b *testing.B) {
-	marshaller := NewAuditMarshaller(NewAuditWriter(&noopWriter{}, 1), uint16(1300), uint16(1399), false, false, 1, []AuditFilter{})
+	marshaller := NewAuditMarshaller(NewDefaultAuditWriter(&noopWriter{}, 1), uint16(1300), uint16(1399), false, false, 1, []AuditFilter{})
 
 	data := make([][]byte, 6)
 

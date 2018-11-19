@@ -6,21 +6,25 @@ import (
 	"time"
 )
 
-type AuditWriter struct {
+type AuditWriter interface {
+	Write(*AuditMessageGroup) error
+}
+
+type DefaultAuditWriter struct {
 	e        *json.Encoder
 	w        io.Writer
 	attempts int
 }
 
-func NewAuditWriter(w io.Writer, attempts int) *AuditWriter {
-	return &AuditWriter{
+func NewDefaultAuditWriter(w io.Writer, attempts int) *DefaultAuditWriter {
+	return &DefaultAuditWriter{
 		e:        json.NewEncoder(w),
 		w:        w,
 		attempts: attempts,
 	}
 }
 
-func (a *AuditWriter) Write(msg *AuditMessageGroup) (err error) {
+func (a *DefaultAuditWriter) Write(msg *AuditMessageGroup) (err error) {
 	for i := 0; i < a.attempts; i++ {
 		err = a.e.Encode(msg)
 		if err == nil {
