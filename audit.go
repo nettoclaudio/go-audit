@@ -148,6 +148,8 @@ func createGELFOutput(config *viper.Viper) (AuditWriter, error) {
 		return nil, fmt.Errorf("Output address for GELF must be set")
 	}
 
+	extra := config.GetStringMap("output.gelf.extra")
+
 	switch config.GetString("output.gelf.network") {
 	case "udp":
 		writer, err := gelf.NewUDPWriter(address)
@@ -158,14 +160,14 @@ func createGELFOutput(config *viper.Viper) (AuditWriter, error) {
 		writer.CompressionType = gelf.CompressType(config.GetInt("output.gelf.compression.type"))
 		writer.CompressionLevel = config.GetInt("output.gelf.compression.level")
 
-		return NewDefaultAuditWriter(writer, attempts), nil
+		return NewGELFAuditWriter(writer, attempts, extra), nil
 	case "tcp":
 		writer, err := gelf.NewTCPWriter(address)
 		if err != nil {
 			return nil, err
 		}
 
-		return NewDefaultAuditWriter(writer, attempts), nil
+		return NewGELFAuditWriter(writer, attempts, extra), nil
 	default:
 		return nil, fmt.Errorf("unsupported network by GELF library")
 	}

@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"os"
 	"time"
+
+	"gopkg.in/Graylog2/go-gelf.v2/gelf"
 )
 
 type AuditWriter interface {
@@ -36,6 +39,57 @@ func (a *DefaultAuditWriter) Write(msg *AuditMessageGroup) (err error) {
 			a.e = json.NewEncoder(a.w)
 			el.Println("Failed to write message, retrying in 1 second. Error:", err)
 			time.Sleep(time.Second * 1)
+		}
+	}
+
+	return err
+}
+
+func NewGELFAuditWriter(writer gelf.Writer, attempts int, extra map[string]interface{}) *GELFAuditWriter {
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "UNNAMED_HOST"
+	}
+
+	return &GELFAuditWriter{
+		writer:   writer,
+		hostname: hostname,
+		attempts: attempts,
+		extra:    extra,
+	}
+}
+
+type GELFAuditWriter struct {
+	attempts int
+	hostname string
+	writer   gelf.Writer
+	extra    map[string]interface{}
+}
+
+func (gw *GELFAuditWriter) Write(msg *AuditMessageGroup) error {
+
+	rawData, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < gw.attempts; i++ {
+		err = gw.writer.WriteMessage(&gelf.Message{
+			Version:  "1.1",
+			Host:     gw.hostname,
+			Short:    string(rawData),
+			TimeUnix: float64(time.Now().Unix()),
+			Extra:    gw.extra,
+		})
+
+		if err == nil {
+			break
+		}
+
+		if i != gw.attempts {
+			el.Println("Failed to write message, retrying in 1 second. Error:", err)
+			time.Sleep(time.Second)
 		}
 	}
 
